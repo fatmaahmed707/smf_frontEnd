@@ -1,0 +1,63 @@
+name: smf_main
+description: SMF - Security Monitoring & Facility Management Application
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  provider: ^6.1.1
+  http: ^1.1.0
+  shared_preferences: ^2.2.2
+  lucide_icons: ^0.257.0
+  google_sign_in: ^6.2.1
+  google_sign_in_web: ^0.12.4+4
+  
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo.png
+    - assets/images/logo_smf_clear.png
+    - assets/images/hero_light.jpeg
+    - assets/images/hero_dark.jpeg
+    - assets/images/right_icon.png
+    - assets/images/qr.jpeg
+    - assets/images/isometric_factory_map.png
+    - assets/images/logo_shield_clean.png
+    - assets/images/logo_shield_flood.png
+    - assets/images/logo_shield_unified.png
+    - assets/images/logo_hq.png
+    - assets/images/workers_login_light.jpg
+    - assets/images/workers_login_dark.jpg
+    - assets/images/workers_login_light_hero.png
+    - assets/images/workers_login_dark_hero.png
+    - assets/images/workers_login_light_unified.png
+    - assets/images/workers_login_dark_unified.png
+    - assets/images/uni_design.png
+    
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
