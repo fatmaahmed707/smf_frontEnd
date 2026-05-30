@@ -40,6 +40,7 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
   String? _errorMessage;
   List<ZoneSummary> _zones = const [];
   List<RoleSummary> _roles = const [];
+  final Map<String, Set<int>> _sessionAssignedRoleIds = {};
 
   String _localizedZoneName(String value, LanguageProvider lang) {
     final lower = value.toLowerCase();
@@ -67,9 +68,19 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
         _zonesService.getZones(),
         _rolesService.getRoles(),
       ]);
+      final zoneSummaries = results[0] as List<ZoneSummary>;
+      final zones = await Future.wait(
+        zoneSummaries.map((zone) async {
+          try {
+            return await _zonesService.getZone(zone.id);
+          } catch (_) {
+            return zone;
+          }
+        }),
+      );
       if (!mounted) return;
       setState(() {
-        _zones = results[0] as List<ZoneSummary>;
+        _zones = zones;
         _roles = results[1] as List<RoleSummary>;
         _isLoading = false;
       });
@@ -130,15 +141,38 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
 
   Future<void> _assignRole(ZoneSummary zone) async {
     final lang = context.read<LanguageProvider>();
-    final role = await _pickRole(
+    final selectedRoles = await _pickRoles(
       context,
       roles: _roles,
       title: lang.getText('assignRole'),
+      selectedRoleIds: _assignedRoleIds(zone),
     );
-    if (role == null) return;
-    await _runMutation(
-      () => _zonesService.assignRoleToZone(zoneId: zone.id, roleId: role.id),
-    );
+    if (selectedRoles == null || selectedRoles.isEmpty) return;
+    try {
+      for (final role in selectedRoles) {
+        await _zonesService.assignRoleToZone(
+          zoneId: zone.id,
+          roleId: role.id,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        final assigned = _sessionAssignedRoleIds.putIfAbsent(
+          zone.id,
+          () => <int>{},
+        );
+        assigned.addAll(selectedRoles.map((role) => role.id));
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(lang.getText('zoneSaved'))),
+      );
+      await _loadZones();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    }
   }
 
   Future<void> _removeRole(ZoneSummary zone) async {
@@ -149,9 +183,22 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
       title: lang.getText('removeRole'),
     );
     if (role == null) return;
-    await _runMutation(
-      () => _zonesService.removeRoleFromZone(zoneId: zone.id, roleId: role.id),
-    );
+    try {
+      await _zonesService.removeRoleFromZone(zoneId: zone.id, roleId: role.id);
+      if (!mounted) return;
+      setState(() {
+        _sessionAssignedRoleIds[zone.id]?.remove(role.id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(lang.getText('zoneSaved'))),
+      );
+      await _loadZones();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    }
   }
 
   Future<void> _runMutation(Future<dynamic> Function() task) async {
@@ -299,6 +346,7 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
                   : severity == 'Medium'
                       ? const Color(0xFFFBBF24)
                       : const Color(0xFF38BDF8);
+              final assignedRoleNames = _assignedRoleNames(zone, lang);
 
               return Container(
                 padding: const EdgeInsets.all(20),
@@ -339,24 +387,24 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
                       lang.getText('monitoredAccessArea'),
                       style: TextStyle(color: muted, height: 1.45),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        severity == 'High'
-                            ? lang.getText('highPriority')
-                            : severity == 'Medium'
-                                ? lang.getText('mediumPriority')
-                                : lang.getText('lowSecurity'),
-                        style: TextStyle(
-                          color: accent,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: assignedRoleNames.isEmpty
+                          ? [
+                              _RoleAccessChip(
+                                label: lang.getText('noAssignedRoles'),
+                                color: muted,
+                              ),
+                            ]
+                          : assignedRoleNames
+                              .map(
+                                (roleName) => _RoleAccessChip(
+                                  label: roleName,
+                                  color: accent,
+                                ),
+                              )
+                              .toList(),
                     ),
                     Wrap(
                       spacing: 8,
@@ -401,6 +449,73 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
     if (status == 'emergency' || status == 'high') return 'High';
     if (status == 'warning' || status == 'medium') return 'Medium';
     return 'Low';
+  }
+
+  Set<int> _assignedRoleIds(ZoneSummary zone) {
+    final ids = <int>{
+      ...zone.roleIds,
+      ...?_sessionAssignedRoleIds[zone.id],
+    };
+    final normalizedNames = zone.roleNames.map(_normalizeRoleName).toSet();
+    for (final role in _roles) {
+      if (normalizedNames.contains(_normalizeRoleName(role.roleName))) {
+        ids.add(role.id);
+      }
+    }
+    return ids;
+  }
+
+  List<String> _assignedRoleNames(ZoneSummary zone, LanguageProvider lang) {
+    final names = <String>[];
+    final roleIds = _assignedRoleIds(zone);
+    for (final role in _roles) {
+      if (roleIds.contains(role.id)) {
+        names.add(_localizedZoneRoleName(role.roleName, lang));
+      }
+    }
+    for (final roleName in zone.roleNames) {
+      final normalized = _normalizeRoleName(roleName);
+      final alreadyAdded = names.any(
+        (name) => _normalizeRoleName(name) == normalized,
+      );
+      if (!alreadyAdded) {
+        names.add(_localizedZoneRoleName(roleName, lang));
+      }
+    }
+    return names;
+  }
+}
+
+String _normalizeRoleName(String value) {
+  return value.trim().toUpperCase().replaceFirst(RegExp(r'^ROLE_'), '');
+}
+
+class _RoleAccessChip extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _RoleAccessChip({
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }
 
@@ -540,6 +655,112 @@ Future<RoleSummary?> _pickRole(
           ),
         ],
       ),
+    ),
+  );
+}
+
+Future<List<RoleSummary>?> _pickRoles(
+  BuildContext context, {
+  required List<RoleSummary> roles,
+  required String title,
+  Set<int> selectedRoleIds = const {},
+}) async {
+  final lang = context.read<LanguageProvider>();
+  if (roles.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(lang.getText('noRolesAvailable'))),
+    );
+    return null;
+  }
+
+  final existingIds = {...selectedRoleIds};
+  final selectedIds = {...selectedRoleIds};
+
+  return showDialog<List<RoleSummary>>(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        final newlySelectedCount =
+            selectedIds.where((id) => !existingIds.contains(id)).length;
+
+        return AlertDialog(
+          title: Text(title),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420, maxHeight: 380),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: lang.getText('roles'),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: const Icon(Icons.expand_more_rounded),
+                  ),
+                  child: Text(
+                    newlySelectedCount == 0
+                        ? lang.getText('selectedRoles')
+                        : '$newlySelectedCount ${lang.getText('roles')}',
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: roles.map((role) {
+                        final isSelected = selectedIds.contains(role.id);
+                        final isAlreadyAssigned = existingIds.contains(role.id);
+                        return CheckboxListTile(
+                          value: isSelected,
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(
+                            _localizedZoneRoleName(role.roleName, lang),
+                          ),
+                          subtitle: isAlreadyAssigned
+                              ? Text(lang.getText('assigned'))
+                              : null,
+                          onChanged: (checked) {
+                            setDialogState(() {
+                              if (checked == true) {
+                                selectedIds.add(role.id);
+                              } else if (!isAlreadyAssigned) {
+                                selectedIds.remove(role.id);
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(lang.getText('cancel')),
+            ),
+            FilledButton(
+              onPressed: newlySelectedCount == 0
+                  ? null
+                  : () => Navigator.pop(
+                        context,
+                        roles
+                            .where(
+                              (role) =>
+                                  selectedIds.contains(role.id) &&
+                                  !existingIds.contains(role.id),
+                            )
+                            .toList(),
+                      ),
+              child: Text(lang.getText('apply')),
+            ),
+          ],
+        );
+      },
     ),
   );
 }

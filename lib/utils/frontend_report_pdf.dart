@@ -2,15 +2,25 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:smf_main/models/device_record.dart';
 import 'package:smf_main/models/user.dart';
 import 'package:smf_main/services/frontend_report_snapshot.dart';
 
-Future<Uint8List> buildFrontendSnapshotPdf({String? generatedBy}) async {
+enum ReportLanguage { english, arabic }
+
+Future<Uint8List> buildFrontendSnapshotPdf({
+  String? generatedBy,
+  ReportLanguage language = ReportLanguage.english,
+}) async {
   final snapshot = FrontendReportSnapshot.instance;
   final data = _ReportData.fromSnapshot(snapshot);
   final logo = await _loadPdfImage('assets/images/logo_smf_clear.png');
+  if (language == ReportLanguage.arabic) {
+    await _ensureArabicFontLoaded();
+    return _ArabicImageReportPdf(data, logo: logo).build();
+  }
   return _EnterprisePdf(data, logo: logo).build();
 }
 
@@ -18,6 +28,16 @@ String frontendSnapshotFilename() {
   final now = DateTime.now();
   String two(int value) => value.toString().padLeft(2, '0');
   return 'smf-admin-frontend-report-${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}.pdf';
+}
+
+bool _arabicFontLoaded = false;
+
+Future<void> _ensureArabicFontLoaded() async {
+  if (_arabicFontLoaded) return;
+  final loader = FontLoader('Cairo')
+    ..addFont(rootBundle.load('assets/fonts/Cairo.ttf'));
+  await loader.load();
+  _arabicFontLoaded = true;
 }
 
 Future<_PdfImage?> _loadPdfImage(String assetPath) async {
@@ -159,7 +179,19 @@ class _EnterprisePdf {
     );
 
     if (logo != null) {
-      _page.image(logo!.name, margin + 10, _y - 56, 50, 42);
+      const logoMaxW = 56.0;
+      const logoMaxH = 48.0;
+      final logoRatio = logo!.width / logo!.height;
+      const boxRatio = logoMaxW / logoMaxH;
+      final logoW = logoRatio > boxRatio ? logoMaxW : logoMaxH * logoRatio;
+      final logoH = logoRatio > boxRatio ? logoMaxW / logoRatio : logoMaxH;
+      _page.image(
+        logo!.name,
+        margin + 10 + (logoMaxW - logoW) / 2,
+        _y - 60 + (logoMaxH - logoH) / 2,
+        logoW,
+        logoH,
+      );
     } else {
       _page.rect(margin + 13, _y - 46, 32, 32, fill: _PdfColor.blueSoft);
       _page.text('SMF', margin + 19, _y - 27,
@@ -167,7 +199,7 @@ class _EnterprisePdf {
     }
     _page.line(margin + 68, _y - 62, margin + 68, _y - 11, _PdfColor.divider);
 
-    _page.text('SMF Admin Operations Report', margin + 86, _y - 23,
+    _page.text('SMF Admin Operations Report', margin + 86, _y - 37,
         size: 16.4, color: _PdfColor.text, bold: true);
     const metaX = pageWidth - margin - 184;
     _page.rect(metaX + 1.5, _y - 60.5, 172, 48, fill: _PdfColor.shadow);
@@ -549,6 +581,339 @@ class _EnterprisePdf {
   }
 }
 
+class _ArabicImageReportPdf {
+  final _ReportData data;
+  final _PdfImage? logo;
+  static const double pageWidth = 595;
+  static const double pageHeight = 842;
+  static const double renderScale = 3;
+
+  _ArabicImageReportPdf(this.data, {this.logo});
+
+  Future<Uint8List> build() async {
+    final image = await _renderPageImage();
+    final page = _PdfPage(pageWidth, pageHeight)
+      ..image(image.name, 0, 0, pageWidth, pageHeight);
+    if (logo != null) {
+      const logoMaxW = 56.0;
+      const logoMaxH = 48.0;
+      final logoRatio = logo!.width / logo!.height;
+      const boxRatio = logoMaxW / logoMaxH;
+      final logoW = logoRatio > boxRatio ? logoMaxW : logoMaxH * logoRatio;
+      final logoH = logoRatio > boxRatio ? logoMaxW / logoRatio : logoMaxH;
+      page.image(
+        logo!.name,
+        pageWidth - 82 + (logoMaxW - logoW) / 2,
+        pageHeight - 80 + (logoMaxH - logoH) / 2,
+        logoW,
+        logoH,
+      );
+    }
+    return _PdfDocument([page], images: [
+      image,
+      if (logo != null) logo!,
+    ]).build();
+  }
+
+  Future<_PdfImage> _renderPageImage() async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    canvas.scale(renderScale, renderScale);
+    const size = ui.Size(pageWidth, pageHeight);
+    final paint = ui.Paint()..color = const ui.Color(0xFFF8FAFC);
+    canvas.drawRect(ui.Offset.zero & size, paint);
+
+    _card(canvas, const ui.Rect.fromLTWH(20, 20, 555, 88));
+    _line(canvas, const ui.Offset(500, 36), const ui.Offset(500, 92));
+    _line(canvas, const ui.Offset(180, 36), const ui.Offset(180, 92));
+    _text(
+      canvas,
+      'تقرير عمليات إدارة SMF',
+      const ui.Rect.fromLTWH(250, 45, 228, 30),
+      size: 18.4,
+      bold: true,
+      align: TextAlign.right,
+    );
+    _text(
+      canvas,
+      'تقرير إداري تشغيلي للسلامة الصناعية',
+      const ui.Rect.fromLTWH(250, 73, 228, 16),
+      size: 8.6,
+      color: const ui.Color(0xFF64748B),
+      align: TextAlign.right,
+    );
+    _rect(canvas, const ui.Rect.fromLTWH(28, 36, 146, 56),
+        const ui.Color(0xFFF4F7FB),
+        stroke: const ui.Color(0xFFE3EAF3),
+        radius: 6);
+    _meta(canvas, 'وقت الإنشاء', _dateTime(data.generatedAt), 48);
+    _meta(canvas, 'النطاق', 'الجلسة الحالية', 70);
+
+    var y = 134.0;
+    _section(canvas, 'الملخص التنفيذي', y);
+    y += 28;
+    final metrics = [
+      ('المستخدمون', '${data.users.length}', const ui.Color(0xFF1E5FA8)),
+      ('الأجهزة المعينة', '${data.devices.length}', const ui.Color(0xFF2E7D46)),
+      ('غير معينين', '${data.usersWithoutDevices.length}', const ui.Color(0xFFC45D10)),
+      ('أجهزة غير متصلة', '${data.offlineDevices.length}', const ui.Color(0xFF6A56B3)),
+      ('أجهزة استغاثة', '${data.sosDevices.length}', const ui.Color(0xFFB9262E)),
+      ('أجهزة بمخالفات', '${data.violationDevices.length}', const ui.Color(0xFFB7791F)),
+    ];
+    const gap = 8.0;
+    const cardW = (pageWidth - 40 - gap * 2) / 3;
+    const cardH = 41.0;
+    for (var i = 0; i < metrics.length; i++) {
+      final col = i % 3;
+      final row = i ~/ 3;
+      final x = 20 + col * (cardW + gap);
+      final top = y + row * (cardH + 8);
+      _card(canvas, ui.Rect.fromLTWH(x, top, cardW, cardH));
+      _rect(canvas, ui.Rect.fromLTWH(x + cardW - 34, top + 11, 22, 22),
+          metrics[i].$3.withAlpha(28),
+          radius: 7);
+      _text(canvas, metrics[i].$2, ui.Rect.fromLTWH(x + 16, top + 9, 46, 22),
+          size: 18.5, bold: true, color: const ui.Color(0xFF101827));
+      _text(
+        canvas,
+        metrics[i].$1,
+        ui.Rect.fromLTWH(x + 62, top + 14, cardW - 78, 18),
+        size: 8.8,
+        bold: true,
+        color: const ui.Color(0xFF526070),
+        align: TextAlign.right,
+      );
+    }
+
+    y += cardH * 2 + 30;
+    _section(canvas, 'المستخدمون والقوى العاملة', y);
+    y += 20;
+    y = _table(
+      canvas,
+      y,
+      ['#', 'المستخدم / البريد', 'الأدوار', 'الأجهزة المعينة', 'الحالة', 'آخر ظهور'],
+      [24, 128, 88, 135, 72, 108],
+      data.users.take(9).toList().asMap().entries.map((entry) {
+        final user = entry.value;
+        final devices =
+            data.devices.where((device) => device.ownerId == user.id).toList();
+        return [
+          '${entry.key + 1}',
+          '${_displayUserAr(user)} / ${_value(user.email)}',
+          _rolesAr(user),
+          devices.isEmpty ? 'غير معين' : devices.map(_deviceLabelAr).join('، '),
+          'نشط',
+          _lastSeenForAr(devices),
+        ];
+      }).toList(),
+    );
+
+    y += 18;
+    _section(canvas, 'تعيينات الأجهزة', y);
+    y += 20;
+    y = _table(
+      canvas,
+      y,
+      ['#', 'عنوان الجهاز', 'المالك', 'الحالة', 'آخر ظهور', 'المنطقة', 'المخالفات'],
+      [24, 112, 86, 64, 82, 116, 71],
+      data.devices.take(6).toList().asMap().entries.map((entry) {
+        final device = entry.value;
+        return [
+          '${entry.key + 1}',
+          _value(device.macAddress),
+          _valueAr(_ownerNameAr(data.users, device.ownerId)),
+          _statusAr(device.status),
+          _dateTimeAr(device.lastSeenTimestamp),
+          _valueAr(device.zoneName ?? device.zoneId),
+          '${device.violationCount}',
+        ];
+      }).toList(),
+    );
+
+    y += 18;
+    _section(canvas, 'المخاطر والسجل', y);
+    y += 20;
+    _card(canvas, ui.Rect.fromLTWH(20, y, 270, 88));
+    _text(canvas, 'سجل أجهزة إس إم إف', ui.Rect.fromLTWH(36, y + 14, 230, 18),
+        size: 10, bold: true, color: const ui.Color(0xFF1E5FA8), align: TextAlign.right);
+    _text(canvas, '${data.snapshot.smfDevices.length}', ui.Rect.fromLTWH(36, y + 39, 60, 25),
+        size: 20, bold: true);
+    _text(canvas, 'أجهزة مسجلة', ui.Rect.fromLTWH(110, y + 48, 145, 16),
+        size: 8, color: const ui.Color(0xFF5E6B7C), align: TextAlign.right);
+
+    _card(canvas, ui.Rect.fromLTWH(305, y, 270, 88));
+    _text(canvas, 'مؤشرات المخاطر', ui.Rect.fromLTWH(321, y + 14, 230, 18),
+        size: 10, bold: true, color: const ui.Color(0xFF1E5FA8), align: TextAlign.right);
+    final risks = [
+      'مستخدمون بدون أجهزة: ${data.usersWithoutDevices.length}',
+      'أجهزة غير متصلة: ${data.offlineDevices.length}',
+      'أجهزة استغاثة: ${data.sosDevices.length}',
+      'أجهزة بمخالفات: ${data.violationDevices.length}',
+    ];
+    for (var i = 0; i < risks.length; i++) {
+      _text(canvas, risks[i], ui.Rect.fromLTWH(326, y + 35 + i * 14.5, 220, 14),
+          size: 8.2, bold: true, align: TextAlign.right);
+    }
+
+    _footer(canvas);
+    final picture = recorder.endRecording();
+    final rendered = await picture.toImage(
+      (pageWidth * renderScale).toInt(),
+      (pageHeight * renderScale).toInt(),
+    );
+    final rgba = await rendered.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final source = rgba!.buffer.asUint8List();
+    final imageWidth = (pageWidth * renderScale).toInt();
+    final imageHeight = (pageHeight * renderScale).toInt();
+    final rgb = Uint8List(imageWidth * imageHeight * 3);
+    var target = 0;
+    for (var i = 0; i < source.length; i += 4) {
+      rgb[target++] = source[i];
+      rgb[target++] = source[i + 1];
+      rgb[target++] = source[i + 2];
+    }
+    return _PdfImage(
+      name: 'ImArabicPage',
+      width: imageWidth,
+      height: imageHeight,
+      bytes: rgb,
+    );
+  }
+
+  double _table(
+    ui.Canvas canvas,
+    double y,
+    List<String> headers,
+    List<double> widths,
+    List<List<String>> rows,
+  ) {
+    const x = 20.0;
+    final totalW = widths.reduce((a, b) => a + b);
+    _rect(canvas, ui.Rect.fromLTWH(x, y, totalW, 22), const ui.Color(0xFFD7E5F5),
+        radius: 4);
+    var colX = x;
+    for (var i = 0; i < headers.length; i++) {
+      _text(canvas, headers[i], ui.Rect.fromLTWH(colX + 6, y + 5.5, widths[i] - 12, 12),
+          size: 7.9, bold: true, color: const ui.Color(0xFF0F1C2E), align: TextAlign.right);
+      colX += widths[i];
+    }
+    y += 22;
+    for (var r = 0; r < rows.length; r++) {
+      _rect(canvas, ui.Rect.fromLTWH(x, y, totalW, 24),
+          r.isEven ? const ui.Color(0xFFFFFFFF) : const ui.Color(0xFFF2F6FC),
+          stroke: const ui.Color(0xFFDCE5F0),
+          radius: 2);
+      colX = x;
+      for (var c = 0; c < rows[r].length; c++) {
+        _text(canvas, _truncate(rows[r][c], c == 1 || c == 3 ? 28 : 18),
+            ui.Rect.fromLTWH(colX + 6, y + 6.5, widths[c] - 12, 12),
+            size: 7.2,
+            color: const ui.Color(0xFF0B1220),
+            align: TextAlign.right);
+        colX += widths[c];
+      }
+      y += 24;
+    }
+    return y;
+  }
+
+  void _meta(ui.Canvas canvas, String label, String value, double top) {
+    _text(canvas, label, ui.Rect.fromLTWH(94, top, 70, 14),
+        size: 6.9, bold: true, color: const ui.Color(0xFF526070), align: TextAlign.right);
+    _text(canvas, value, ui.Rect.fromLTWH(34, top, 56, 14),
+        size: 6.8, bold: true, align: TextAlign.right);
+  }
+
+  void _section(ui.Canvas canvas, String title, double y) {
+    _text(canvas, title, ui.Rect.fromLTWH(340, y, 235, 20),
+        size: 14.8, bold: true, color: const ui.Color(0xFF1E5FA8), align: TextAlign.right);
+  }
+
+  void _footer(ui.Canvas canvas) {
+    _line(canvas, const ui.Offset(20, 818), const ui.Offset(575, 818));
+    _text(canvas, 'نظام إس إم إف للسلامة الصناعية', const ui.Rect.fromLTWH(360, 828, 200, 12),
+        size: 7.4, bold: true, color: const ui.Color(0xFF5E6B7C), align: TextAlign.right);
+    _text(canvas, 'تم الإنشاء: ${_dateTime(data.generatedAt)}',
+        const ui.Rect.fromLTWH(208, 826, 164, 12),
+        size: 7.2, color: const ui.Color(0xFF5E6B7C), align: TextAlign.center);
+    _text(canvas, 'صفحة 1 / 1', const ui.Rect.fromLTWH(35, 828, 80, 12),
+        size: 7.2, color: const ui.Color(0xFF5E6B7C));
+  }
+
+  void _card(ui.Canvas canvas, ui.Rect rect) {
+    _rect(canvas, rect.shift(const ui.Offset(1.4, 1.4)), const ui.Color(0xFFE5EAF1));
+    _rect(canvas, rect, const ui.Color(0xFFFFFFFF),
+        stroke: const ui.Color(0xFFE4EAF2),
+        radius: 6);
+  }
+
+  void _rect(
+    ui.Canvas canvas,
+    ui.Rect rect,
+    ui.Color color, {
+    ui.Color? stroke,
+    double radius = 5,
+  }) {
+    final paint = ui.Paint()..color = color;
+    canvas.drawRRect(ui.RRect.fromRectAndRadius(rect, ui.Radius.circular(radius)), paint);
+    if (stroke != null) {
+      canvas.drawRRect(
+        ui.RRect.fromRectAndRadius(rect, ui.Radius.circular(radius)),
+        ui.Paint()
+          ..color = stroke
+          ..style = ui.PaintingStyle.stroke
+          ..strokeWidth = 0.8,
+      );
+    }
+  }
+
+  void _line(ui.Canvas canvas, ui.Offset a, ui.Offset b) {
+    canvas.drawLine(
+      a,
+      b,
+      ui.Paint()
+        ..color = const ui.Color(0xFFD8DEE8)
+        ..strokeWidth = 1,
+    );
+  }
+
+  void _text(
+    ui.Canvas canvas,
+    String text,
+    ui.Rect rect, {
+    double size = 8,
+    bool bold = false,
+    ui.Color color = const ui.Color(0xFF101827),
+    TextAlign align = TextAlign.left,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          color: color,
+          fontSize: size,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+          height: 1.18,
+          fontFamily: 'Cairo',
+          fontFamilyFallback: const [
+            'Cairo',
+            'Noto Sans Arabic',
+            'Noto Kufi Arabic',
+            'Tajawal',
+            'IBM Plex Sans Arabic',
+            'Arial',
+          ],
+        ),
+      ),
+      textAlign: align,
+      textDirection: TextDirection.rtl,
+      maxLines: 1,
+      ellipsis: '...',
+    )..layout(maxWidth: rect.width);
+    painter.paint(canvas, rect.topLeft);
+  }
+}
+
 class _Metric {
   final String label;
   final String value;
@@ -589,11 +954,66 @@ String _roles(User user) {
   return roles.isEmpty ? 'Not available' : roles.join(', ');
 }
 
+String _rolesAr(User user) {
+  final roles = user.roles.isNotEmpty
+      ? user.roles
+      : [
+          if (user.role?.trim().isNotEmpty == true) user.role!.trim(),
+        ];
+  if (roles.isEmpty) return 'مستخدم';
+  return roles.map(_roleAr).join('، ');
+}
+
+String _roleAr(String value) {
+  final role = value.trim().replaceFirst(RegExp(r'^ROLE_'), '').toUpperCase();
+  switch (role) {
+    case 'ADMIN':
+      return 'مدير النظام';
+    case 'ENGINEER':
+      return 'مهندس';
+    case 'MANAGER':
+      return 'مدير';
+    case 'WORKER':
+      return 'عامل';
+    case 'SUPERVISOR':
+      return 'مشرف';
+    case 'USER':
+      return 'مستخدم';
+    default:
+      return value;
+  }
+}
+
 String _ownerName(List<User> users, String ownerId) {
   for (final user in users) {
     if (user.id == ownerId) return user.name.isEmpty ? user.email : user.name;
   }
   return ownerId;
+}
+
+String _ownerNameAr(List<User> users, String ownerId) {
+  for (final user in users) {
+    if (user.id == ownerId) return _displayUserAr(user);
+  }
+  return ownerId;
+}
+
+String _displayUserAr(User user) {
+  final source = user.name.trim().isNotEmpty ? user.name.trim() : user.email;
+  switch (source.toLowerCase()) {
+    case 'engineer':
+      return 'مهندس';
+    case 'manager':
+      return 'مدير';
+    case 'worker':
+      return 'عامل';
+    case 'admin':
+      return 'مدير النظام';
+    case '':
+      return 'مستخدم';
+    default:
+      return source;
+  }
 }
 
 String _deviceLabel(DeviceRecord device) {
@@ -607,6 +1027,27 @@ String _deviceLabel(DeviceRecord device) {
   return _value(device.id);
 }
 
+String _deviceLabelAr(DeviceRecord device) {
+  final label = device.displayLabel.trim().isNotEmpty
+      ? device.displayLabel.trim()
+      : device.label.trim();
+  final localizedLabel = _deviceNameAr(label);
+  final mac = device.macAddress.trim();
+  if (localizedLabel.isNotEmpty && mac.isNotEmpty) return '$localizedLabel - $mac';
+  if (localizedLabel.isNotEmpty) return localizedLabel;
+  if (mac.isNotEmpty) return mac;
+  return _valueAr(device.id);
+}
+
+String _deviceNameAr(String value) {
+  final normalized = value.trim().toLowerCase();
+  if (normalized.isEmpty) return '';
+  if (normalized == 'smf device' || normalized == 'smf') {
+    return 'جهاز إس إم إف';
+  }
+  return value;
+}
+
 String _lastSeenFor(List<DeviceRecord> devices) {
   final timestamps = devices
       .map((device) => device.lastSeenTimestamp)
@@ -617,15 +1058,44 @@ String _lastSeenFor(List<DeviceRecord> devices) {
   return _dateTime(timestamps.last);
 }
 
+String _lastSeenForAr(List<DeviceRecord> devices) {
+  final timestamps = devices
+      .map((device) => device.lastSeenTimestamp)
+      .whereType<DateTime>()
+      .toList();
+  if (timestamps.isEmpty) return 'غير متوفر';
+  timestamps.sort();
+  return _dateTimeAr(timestamps.last);
+}
+
 String _value(String? value) {
   final trimmed = value?.trim() ?? '';
   return trimmed.isEmpty ? 'Not available' : trimmed;
+}
+
+String _valueAr(String? value) {
+  final trimmed = value?.trim() ?? '';
+  return trimmed.isEmpty ? 'غير متوفر' : trimmed;
 }
 
 String _dateTime(DateTime? value) {
   if (value == null) return 'Not available';
   String two(int number) => number.toString().padLeft(2, '0');
   return '${value.year}-${two(value.month)}-${two(value.day)} ${two(value.hour)}:${two(value.minute)}';
+}
+
+String _dateTimeAr(DateTime? value) {
+  if (value == null) return 'غير متوفر';
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${value.year}-${two(value.month)}-${two(value.day)} ${two(value.hour)}:${two(value.minute)}';
+}
+
+String _statusAr(String value) {
+  final status = value.toUpperCase();
+  if (status.contains('SOS')) return 'استغاثة';
+  if (status.contains('ONLINE') || status.contains('ACTIVE')) return 'متصل';
+  if (status.contains('OFFLINE')) return 'غير متصل';
+  return _value(value);
 }
 
 String _truncate(String value, int max) {

@@ -1,4 +1,7 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppTheme {
   static const Color primaryBlue = Color(0xFF2563EB);
@@ -366,20 +369,47 @@ class AppTheme {
 }
 
 class ThemeProvider extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.dark;
+  static const _themePreferenceKey = 'app_theme_mode';
+
+  ThemeMode _themeMode;
+
+  ThemeProvider._(this._themeMode);
+
+  static Future<ThemeProvider> create() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedTheme = prefs.getString(_themePreferenceKey);
+    if (savedTheme == 'light') {
+      return ThemeProvider._(ThemeMode.light);
+    }
+    if (savedTheme == 'dark') {
+      return ThemeProvider._(ThemeMode.dark);
+    }
+
+    final systemBrightness =
+        ui.PlatformDispatcher.instance.platformBrightness;
+    final initialMode = systemBrightness == Brightness.light
+        ? ThemeMode.light
+        : ThemeMode.dark;
+    return ThemeProvider._(initialMode);
+  }
 
   ThemeMode get themeMode => _themeMode;
 
   bool get isDarkMode => _themeMode == ThemeMode.dark;
 
   void toggleTheme() {
-    _themeMode =
-        _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-    notifyListeners();
+    setThemeMode(
+      _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light,
+    );
   }
 
-  void setThemeMode(ThemeMode mode) {
+  Future<void> setThemeMode(ThemeMode mode) async {
     _themeMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _themePreferenceKey,
+      mode == ThemeMode.light ? 'light' : 'dark',
+    );
     notifyListeners();
   }
 }

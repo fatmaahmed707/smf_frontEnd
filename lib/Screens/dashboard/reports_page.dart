@@ -209,8 +209,14 @@ class _Header extends StatelessWidget {
             child: ElevatedButton.icon(
               onPressed: () async {
                 try {
+                  final reportLanguage = await _selectReportLanguage(
+                    context,
+                    palette,
+                  );
+                  if (reportLanguage == null) return;
                   final bytes = await buildFrontendSnapshotPdf(
                     generatedBy: AuthService.instance.userId,
+                    language: reportLanguage,
                   );
                   await downloadReportPdf(bytes, frontendSnapshotFilename());
                   if (!context.mounted) return;
@@ -248,6 +254,137 @@ class _Header extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<ReportLanguage?> _selectReportLanguage(
+  BuildContext context,
+  dynamic palette,
+) {
+  return showDialog<ReportLanguage>(
+    context: context,
+    builder: (context) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final cardColor = isDark
+          ? const Color.fromRGBO(5, 18, 45, 0.94)
+          : const Color.fromRGBO(255, 255, 255, 0.98);
+      final borderColor = isDark
+          ? const Color.fromRGBO(56, 189, 248, 0.22)
+          : const Color.fromRGBO(59, 130, 246, 0.16);
+      final textColor = isDark ? Colors.white : const Color(0xFF061942);
+      final mutedColor =
+          isDark ? const Color(0xFF9DB2D8) : const Color(0xFF6678A5);
+
+      Widget option({
+        required String title,
+        required String subtitle,
+        required IconData icon,
+        required ReportLanguage value,
+      }) {
+        return InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.pop(context, value),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: palette.innerCardBackground,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: palette.primaryBlue.withOpacity(0.14),
+                  ),
+                  child: Icon(icon, color: palette.primaryBlue2, size: 21),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(color: mutedColor, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: mutedColor),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.34 : 0.12),
+                  blurRadius: 30,
+                  offset: const Offset(0, 16),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select Report Language',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                option(
+                  title: 'English',
+                  subtitle: 'Generate report in English',
+                  icon: Icons.language_rounded,
+                  value: ReportLanguage.english,
+                ),
+                const SizedBox(height: 10),
+                Directionality(
+                  textDirection: TextDirection.rtl,
+                  child: option(
+                    title: 'العربية',
+                    subtitle: 'إنشاء التقرير باللغة العربية',
+                    icon: Icons.translate_rounded,
+                    value: ReportLanguage.arabic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _MetricCard extends StatelessWidget {

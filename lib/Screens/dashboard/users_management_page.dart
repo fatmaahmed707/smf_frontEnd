@@ -1677,7 +1677,7 @@ class _UsersTable extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final tableWidth =
-                constraints.maxWidth < 1360 ? 1360.0 : constraints.maxWidth;
+                constraints.maxWidth < 1480 ? 1480.0 : constraints.maxWidth;
             return SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
@@ -1749,9 +1749,10 @@ class _UsersTableHeader extends StatelessWidget {
           _UsersHeaderCell(lang.getText('user'), width: 260, palette: palette),
           _UsersHeaderCell(lang.getText('role'), width: 180, palette: palette),
           _UsersHeaderCell(lang.getText('status'), width: 140, palette: palette),
+          _UsersHeaderCell('Violations', width: 138, palette: palette),
           _UsersHeaderCell(lang.getText('lastSeen'), width: 210, palette: palette),
-          _UsersHeaderCell(lang.getText('assignedDevice'), width: 300, palette: palette),
-          _UsersHeaderCell(lang.getText('actions'), width: 190, palette: palette),
+          _UsersHeaderCell(lang.getText('assignedDevice'), width: 336, palette: palette),
+          _UsersHeaderCell(lang.getText('actions'), width: 154, palette: palette),
         ],
       ),
     );
@@ -1811,6 +1812,10 @@ class _UsersTableRow extends StatelessWidget {
     final lang = context.watch<LanguageProvider>();
     final roles = _normalizedRoles(user);
     final accent = _roleColor(roles.first);
+    final violationCount = assignedDevices.fold<int>(
+      0,
+      (total, device) => total + device.violationCount,
+    );
     return Container(
       height: 58,
       color: palette.row,
@@ -1867,6 +1872,13 @@ class _UsersTableRow extends StatelessWidget {
             child: _StatusPill(palette: palette),
           ),
           SizedBox(
+            width: 138,
+            child: _ViolationBadge(
+              count: violationCount,
+              palette: palette,
+            ),
+          ),
+          SizedBox(
             width: 210,
             child: Row(
               children: [
@@ -1885,7 +1897,7 @@ class _UsersTableRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 300,
+            width: 336,
             child: Text(
               _assignedDevicesLabel(assignedDevices, lang),
               maxLines: 1,
@@ -1900,7 +1912,7 @@ class _UsersTableRow extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 178,
+            width: 154,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2137,6 +2149,96 @@ class _StatusPill extends StatelessWidget {
               color: green,
               fontSize: 11,
               fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ViolationBadge extends StatelessWidget {
+  final int count;
+  final _UsersPalette palette;
+
+  const _ViolationBadge({
+    required this.count,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = count == 0
+        ? const Color(0xFF19D389)
+        : count <= 3
+            ? const Color(0xFFFFA51F)
+            : const Color(0xFFFF3B43);
+    final label = count == 0
+        ? 'No violations'
+        : count == 1
+            ? '1 violation'
+            : '$count violations';
+
+    final badge = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: palette.isDark ? 0.18 : 0.10),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: color.withValues(alpha: 0.36)),
+          boxShadow: count >= 4
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: palette.isDark ? 0.34 : 0.20),
+                    blurRadius: 10,
+                    spreadRadius: 0.5,
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (count > 0) ...[
+              Icon(Icons.warning_amber_rounded, color: color, size: 13),
+              const SizedBox(width: 3),
+            ],
+            Text(
+              count.toString(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return Tooltip(
+      message: 'Restricted zone violations',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            button: true,
+            label: 'Restricted zone violations. History will be available later.',
+            child: badge,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: count == 0 ? palette.textMuted : color,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

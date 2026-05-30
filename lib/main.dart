@@ -13,12 +13,14 @@ import 'utils/dashboard_history.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final hasSession = await AuthService.instance.restoreSession();
+  final languageProvider = await LanguageProvider.create();
+  final themeProvider = await ThemeProvider.create();
 
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider.value(value: themeProvider),
+        ChangeNotifierProvider.value(value: languageProvider),
       ],
       child: SMFApp(initiallyAuthenticated: hasSession),
     ),
