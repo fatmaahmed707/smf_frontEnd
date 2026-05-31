@@ -3,6 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 
+import '../../models/device_record.dart';
+import '../../models/event_log.dart';
+import '../../models/user.dart';
+import '../../services/devices_service.dart';
+import '../../services/events_service.dart';
+import '../../services/users_service.dart';
+import '../../services/zones_service.dart';
 import '../../theme/app_theme.dart';
 
 class EmergencyDashboardPage extends StatefulWidget {
@@ -15,6 +22,15 @@ class EmergencyDashboardPage extends StatefulWidget {
 class _EmergencyDashboardPageState extends State<EmergencyDashboardPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
+  final EventsService _eventsService = EventsService();
+  final DevicesService _devicesService = DevicesService();
+  final UsersService _usersService = UsersService();
+  final ZonesService _zonesService = ZonesService();
+  List<EventLog> _events = const [];
+  List<DeviceRecord> _devices = const [];
+  List<User> _users = const [];
+  int _zoneCount = 1;
+  bool _loadedApiData = false;
 
   @override
   void initState() {
@@ -23,12 +39,35 @@ class _EmergencyDashboardPageState extends State<EmergencyDashboardPage>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat(reverse: true);
+    _loadEmergencyData();
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadEmergencyData() async {
+    try {
+      final results = await Future.wait<dynamic>([
+        _eventsService.getEvents(since: 3600 * 24),
+        _devicesService.getDevices(),
+        _usersService.getUsers(),
+        _zonesService.getZones(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _events = results[0] as List<EventLog>;
+        _devices = results[1] as List<DeviceRecord>;
+        _users = results[2] as List<User>;
+        _zoneCount = (results[3] as List).length;
+        _loadedApiData = true;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadedApiData = false);
+    }
   }
 
   @override
@@ -53,10 +92,20 @@ class _EmergencyDashboardPageState extends State<EmergencyDashboardPage>
                 ? _CompactEmergencyBody(
                     palette: palette,
                     pulseController: _pulseController,
+                    events: _events,
+                    devices: _devices,
+                    users: _users,
+                    zoneCount: _zoneCount,
+                    loadedApiData: _loadedApiData,
                   )
                 : _DesktopEmergencyBody(
                     palette: palette,
                     pulseController: _pulseController,
+                    events: _events,
+                    devices: _devices,
+                    users: _users,
+                    zoneCount: _zoneCount,
+                    loadedApiData: _loadedApiData,
                   ),
           );
         },
@@ -68,10 +117,20 @@ class _EmergencyDashboardPageState extends State<EmergencyDashboardPage>
 class _DesktopEmergencyBody extends StatelessWidget {
   final _EmergencyPalette palette;
   final AnimationController pulseController;
+  final List<EventLog> events;
+  final List<DeviceRecord> devices;
+  final List<User> users;
+  final int zoneCount;
+  final bool loadedApiData;
 
   const _DesktopEmergencyBody({
     required this.palette,
     required this.pulseController,
+    required this.events,
+    required this.devices,
+    required this.users,
+    required this.zoneCount,
+    required this.loadedApiData,
   });
 
   @override
@@ -84,7 +143,12 @@ class _DesktopEmergencyBody extends StatelessWidget {
             pulseController: pulseController,
           ),
           const SizedBox(height: 18),
-          _StatsRow(palette: palette),
+          _StatsRow(
+            palette: palette,
+            events: events,
+            devices: devices,
+            zoneCount: zoneCount,
+          ),
           const SizedBox(height: 18),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,7 +167,11 @@ class _DesktopEmergencyBody extends StatelessWidget {
                         Expanded(
                           child: SizedBox(
                             height: 220,
-                            child: _PersonnelCard(palette: palette),
+                            child: _PersonnelCard(
+                              palette: palette,
+                              users: users,
+                              devices: devices,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 18),
@@ -125,12 +193,20 @@ class _DesktopEmergencyBody extends StatelessWidget {
                   children: [
                     SizedBox(
                       height: 260,
-                      child: _ActiveIncidentCard(palette: palette),
+                      child: _ActiveIncidentCard(
+                        palette: palette,
+                        events: events,
+                        loadedApiData: loadedApiData,
+                      ),
                     ),
                     const SizedBox(height: 18),
                     SizedBox(
                       height: 250,
-                      child: _IncidentFeedCard(palette: palette),
+                      child: _IncidentFeedCard(
+                        palette: palette,
+                        events: events,
+                        loadedApiData: loadedApiData,
+                      ),
                     ),
                   ],
                 ),
@@ -138,7 +214,11 @@ class _DesktopEmergencyBody extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          _SystemStrip(palette: palette),
+          _SystemStrip(
+            palette: palette,
+            loadedApiData: loadedApiData,
+            devices: devices,
+          ),
         ],
       ),
     );
@@ -148,10 +228,20 @@ class _DesktopEmergencyBody extends StatelessWidget {
 class _CompactEmergencyBody extends StatelessWidget {
   final _EmergencyPalette palette;
   final AnimationController pulseController;
+  final List<EventLog> events;
+  final List<DeviceRecord> devices;
+  final List<User> users;
+  final int zoneCount;
+  final bool loadedApiData;
 
   const _CompactEmergencyBody({
     required this.palette,
     required this.pulseController,
+    required this.events,
+    required this.devices,
+    required this.users,
+    required this.zoneCount,
+    required this.loadedApiData,
   });
 
   @override
@@ -164,19 +254,49 @@ class _CompactEmergencyBody extends StatelessWidget {
             pulseController: pulseController,
           ),
           const SizedBox(height: 14),
-          _StatsRow(palette: palette),
+          _StatsRow(
+            palette: palette,
+            events: events,
+            devices: devices,
+            zoneCount: zoneCount,
+          ),
           const SizedBox(height: 14),
           SizedBox(height: 250, child: _LiveMapCard(palette: palette)),
           const SizedBox(height: 14),
-          SizedBox(height: 280, child: _ActiveIncidentCard(palette: palette)),
+          SizedBox(
+            height: 280,
+            child: _ActiveIncidentCard(
+              palette: palette,
+              events: events,
+              loadedApiData: loadedApiData,
+            ),
+          ),
           const SizedBox(height: 14),
-          SizedBox(height: 230, child: _IncidentFeedCard(palette: palette)),
+          SizedBox(
+            height: 230,
+            child: _IncidentFeedCard(
+              palette: palette,
+              events: events,
+              loadedApiData: loadedApiData,
+            ),
+          ),
           const SizedBox(height: 14),
-          SizedBox(height: 220, child: _PersonnelCard(palette: palette)),
+          SizedBox(
+            height: 220,
+            child: _PersonnelCard(
+              palette: palette,
+              users: users,
+              devices: devices,
+            ),
+          ),
           const SizedBox(height: 14),
           SizedBox(height: 220, child: _ContactsCard(palette: palette)),
           const SizedBox(height: 14),
-          _SystemStrip(palette: palette),
+          _SystemStrip(
+            palette: palette,
+            loadedApiData: loadedApiData,
+            devices: devices,
+          ),
         ],
       ),
     );
@@ -297,8 +417,16 @@ class _EmergencyBanner extends StatelessWidget {
 
 class _StatsRow extends StatelessWidget {
   final _EmergencyPalette palette;
+  final List<EventLog> events;
+  final List<DeviceRecord> devices;
+  final int zoneCount;
 
-  const _StatsRow({required this.palette});
+  const _StatsRow({
+    required this.palette,
+    required this.events,
+    required this.devices,
+    required this.zoneCount,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -312,13 +440,17 @@ class _StatsRow extends StatelessWidget {
         const spacing = 12.0;
         final itemWidth =
             (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        final activeEvents = events.where(_isEmergencyEvent).length;
+        final onlineDevices = devices
+            .where((device) => device.status.toLowerCase() == 'online')
+            .length;
         final cards = [
-          _StatSpec(
-              'Zone', 'Zone 1', 'Location', LucideIcons.mapPin, palette.blue),
-          _StatSpec('Response Time', '2:34', 'Minutes', LucideIcons.clock,
-              palette.blue),
-          _StatSpec('Units Deployed', '5 Units', 'Nearby', LucideIcons.users,
-              palette.blue),
+          _StatSpec('Zones', zoneCount.toString(), 'Monitored',
+              LucideIcons.mapPin, palette.blue),
+          _StatSpec('Events', activeEvents.toString(), 'Last 24 hours',
+              LucideIcons.clock, activeEvents > 0 ? palette.red : palette.blue),
+          _StatSpec('Units Deployed', onlineDevices.toString(), 'Online',
+              LucideIcons.users, palette.blue),
           _StatSpec('Status', 'ACTIVE', 'All Systems Operational',
               LucideIcons.radio, palette.red),
         ];
@@ -335,6 +467,15 @@ class _StatsRow extends StatelessWidget {
         );
       },
     );
+  }
+
+  bool _isEmergencyEvent(EventLog event) {
+    final normalized = event.eventType.toLowerCase();
+    return normalized.contains('alert') ||
+        normalized.contains('sos') ||
+        normalized.contains('breach') ||
+        normalized.contains('violation') ||
+        normalized.contains('unauthorized');
   }
 }
 
@@ -395,11 +536,18 @@ class _LiveMapCard extends StatelessWidget {
 
 class _ActiveIncidentCard extends StatelessWidget {
   final _EmergencyPalette palette;
+  final List<EventLog> events;
+  final bool loadedApiData;
 
-  const _ActiveIncidentCard({required this.palette});
+  const _ActiveIncidentCard({
+    required this.palette,
+    required this.events,
+    required this.loadedApiData,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final incident = _primaryIncident(events);
     return _Panel(
       palette: palette,
       title: 'Active Incident',
@@ -420,7 +568,7 @@ class _ActiveIncidentCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Security Breach Detected',
+                      incident.$1,
                       style: TextStyle(
                         color: palette.text,
                         fontWeight: FontWeight.w900,
@@ -429,12 +577,12 @@ class _ActiveIncidentCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Main Entrance - Zone 1',
+                      incident.$2,
                       style: TextStyle(color: palette.muted, fontSize: 12),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Reported 08:42 AM   •   Incident ID: INC-2025-0017',
+                      incident.$3,
                       style: TextStyle(color: palette.muted, fontSize: 11),
                     ),
                   ],
@@ -448,140 +596,265 @@ class _ActiveIncidentCard extends StatelessWidget {
       ),
     );
   }
+
+  (String, String, String) _primaryIncident(List<EventLog> events) {
+    if (events.isEmpty) {
+      if (loadedApiData) {
+        return (
+          'No active incident',
+          'Backend event stream is clear',
+          'No emergency events reported in the selected window',
+        );
+      }
+      return (
+        'Security Breach Detected',
+        'Main Entrance - Zone 1',
+        'Reported 08:42 AM   -   Incident ID: INC-2025-0017',
+      );
+    }
+    final event = events.firstWhere(
+      (item) => _isEmergencyEvent(item),
+      orElse: () => events.first,
+    );
+    final title = event.message ?? _titleFromEventType(event.eventType);
+    final location = event.zoneName ??
+        (event.macAddress.isNotEmpty ? event.macAddress : 'SMF event stream');
+    final timestamp = event.createdAt == null
+        ? 'time unavailable'
+        : event.createdAt!.toLocal().toString().split('.').first;
+    return (
+      title,
+      location,
+      'Reported $timestamp   -   Incident ID: ${event.id}'
+    );
+  }
+
+  bool _isEmergencyEvent(EventLog event) {
+    final normalized = event.eventType.toLowerCase();
+    return normalized.contains('alert') ||
+        normalized.contains('sos') ||
+        normalized.contains('breach') ||
+        normalized.contains('violation') ||
+        normalized.contains('unauthorized');
+  }
 }
 
 class _IncidentFeedCard extends StatelessWidget {
   final _EmergencyPalette palette;
+  final List<EventLog> events;
+  final bool loadedApiData;
 
-  const _IncidentFeedCard({required this.palette});
+  const _IncidentFeedCard({
+    required this.palette,
+    required this.events,
+    required this.loadedApiData,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final events = [
-      (
-        '08:42 AM',
-        'Security breach detected at Main Entrance',
-        'Zone 1',
-        palette.red,
-        Icons.warning_amber_rounded
-      ),
-      (
-        '08:43 AM',
-        'Response team dispatched',
-        'Unit 3',
-        palette.blue,
-        Icons.directions_car_filled_outlined
-      ),
-      (
-        '08:44 AM',
-        'Unit 3 en route to incident location',
-        '2 min ago',
-        palette.green,
-        Icons.route_rounded
-      ),
-      (
-        '08:45 AM',
-        'CCTV recording initiated',
-        'Main Entrance Camera',
-        palette.gold,
-        Icons.videocam_outlined
-      ),
-    ];
+    final feedEvents = events.isEmpty && !loadedApiData
+        ? [
+            (
+              '08:42 AM',
+              'Security breach detected at Main Entrance',
+              'Zone 1',
+              palette.red,
+              Icons.warning_amber_rounded
+            ),
+            (
+              '08:43 AM',
+              'Response team dispatched',
+              'Unit 3',
+              palette.blue,
+              Icons.directions_car_filled_outlined
+            ),
+            (
+              '08:44 AM',
+              'Unit 3 en route to incident location',
+              '2 min ago',
+              palette.green,
+              Icons.route_rounded
+            ),
+            (
+              '08:45 AM',
+              'CCTV recording initiated',
+              'Main Entrance Camera',
+              palette.gold,
+              Icons.videocam_outlined
+            ),
+          ]
+        : events.take(8).map((event) {
+            final normalized = event.eventType.toLowerCase();
+            final color = normalized.contains('sos') ||
+                    normalized.contains('alert') ||
+                    normalized.contains('breach')
+                ? palette.red
+                : normalized.contains('device')
+                    ? palette.gold
+                    : palette.blue;
+            final icon = normalized.contains('device')
+                ? Icons.memory_rounded
+                : normalized.contains('zone')
+                    ? Icons.place_rounded
+                    : Icons.warning_amber_rounded;
+            return (
+              _timeLabel(event.createdAt),
+              event.message ?? _titleFromEventType(event.eventType),
+              event.zoneName ??
+                  (event.macAddress.isEmpty
+                      ? 'SMF event stream'
+                      : event.macAddress),
+              color,
+              icon,
+            );
+          }).toList();
     return _Panel(
       palette: palette,
       title: 'Incident Feed',
       trailing: _MiniButton(palette: palette, label: 'View All'),
-      child: ListView.separated(
-        padding: EdgeInsets.zero,
-        itemCount: events.length,
-        separatorBuilder: (_, __) => Divider(color: palette.line, height: 1),
-        itemBuilder: (context, index) {
-          final event = events[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: event.$4.withValues(alpha: 0.16),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: event.$4.withValues(alpha: 0.6)),
-                  ),
-                  child: Icon(event.$5, color: event.$4, size: 17),
+      child: feedEvents.isEmpty
+          ? Center(
+              child: Text(
+                'No backend incidents found',
+                style: TextStyle(
+                  color: palette.muted,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 58,
-                  child: Text(event.$1,
-                      style: TextStyle(color: palette.muted, fontSize: 11)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+            )
+          : ListView.separated(
+              padding: EdgeInsets.zero,
+              itemCount: feedEvents.length,
+              separatorBuilder: (_, __) =>
+                  Divider(color: palette.line, height: 1),
+              itemBuilder: (context, index) {
+                final event = feedEvents[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Row(
                     children: [
-                      Text(
-                        event.$2,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: palette.text,
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: event.$4.withValues(alpha: 0.16),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: event.$4.withValues(alpha: 0.6)),
                         ),
+                        child: Icon(event.$5, color: event.$4, size: 17),
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        event.$3,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: palette.muted, fontSize: 11),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 58,
+                        child: Text(event.$1,
+                            style:
+                                TextStyle(color: palette.muted, fontSize: 11)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              event.$2,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: palette.text,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              event.$3,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  TextStyle(color: palette.muted, fontSize: 11),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                );
+              },
             ),
-          );
-        },
-      ),
     );
+  }
+
+  String _timeLabel(DateTime? createdAt) {
+    if (createdAt == null) return '--:--';
+    final local = createdAt.toLocal();
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }
 
 class _PersonnelCard extends StatelessWidget {
   final _EmergencyPalette palette;
+  final List<User> users;
+  final List<DeviceRecord> devices;
 
-  const _PersonnelCard({required this.palette});
+  const _PersonnelCard({
+    required this.palette,
+    required this.users,
+    required this.devices,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final assignedUsers = users.take(2).toList();
     return _Panel(
       palette: palette,
       title: 'Emergency Personnel',
       trailing: _MiniButton(palette: palette, label: 'View All'),
       child: Column(
-        children: [
-          _PersonTile(
-            palette: palette,
-            initials: 'JL',
-            name: 'Jessica Lee',
-            meta: 'Zone 1  •  125 BPM',
-            color: palette.red,
-          ),
-          Divider(color: palette.line, height: 1),
-          _PersonTile(
-            palette: palette,
-            initials: 'MS',
-            name: 'Michael Smith',
-            meta: 'Zone 2  •  95 BPM',
-            color: palette.gold,
-          ),
-        ],
+        children: assignedUsers.isEmpty
+            ? [
+                _PersonTile(
+                  palette: palette,
+                  initials: 'JL',
+                  name: 'Jessica Lee',
+                  meta: 'Zone 1  -  125 BPM',
+                  color: palette.red,
+                ),
+                Divider(color: palette.line, height: 1),
+                _PersonTile(
+                  palette: palette,
+                  initials: 'MS',
+                  name: 'Michael Smith',
+                  meta: 'Zone 2  -  95 BPM',
+                  color: palette.gold,
+                ),
+              ]
+            : [
+                for (var i = 0; i < assignedUsers.length; i++) ...[
+                  _PersonTile(
+                    palette: palette,
+                    initials: _initials(assignedUsers[i].name),
+                    name: assignedUsers[i].name.isEmpty
+                        ? assignedUsers[i].email
+                        : assignedUsers[i].name,
+                    meta:
+                        '${devices.length} devices visible  -  ${assignedUsers[i].role ?? 'USER'}',
+                    color: i == 0 ? palette.red : palette.gold,
+                  ),
+                  if (i != assignedUsers.length - 1)
+                    Divider(color: palette.line, height: 1),
+                ],
+              ],
       ),
     );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+    final value = parts.take(2).map((p) => p[0].toUpperCase()).join();
+    return value.isEmpty ? 'U' : value;
   }
 }
 
@@ -619,17 +892,37 @@ class _ContactsCard extends StatelessWidget {
 
 class _SystemStrip extends StatelessWidget {
   final _EmergencyPalette palette;
+  final bool loadedApiData;
+  final List<DeviceRecord> devices;
 
-  const _SystemStrip({required this.palette});
+  const _SystemStrip({
+    required this.palette,
+    required this.loadedApiData,
+    required this.devices,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final networkStatus = loadedApiData ? 'Synced' : 'Fallback';
+    final onlineDevices = devices
+        .where((device) => device.status.toLowerCase() == 'online')
+        .length;
     final items = [
-      ('System Status', 'Operational', Icons.wifi_rounded, palette.green),
+      (
+        'System Status',
+        networkStatus,
+        Icons.wifi_rounded,
+        loadedApiData ? palette.green : palette.gold
+      ),
       ('Communication', 'Encrypted', Icons.lock_outline_rounded, palette.muted),
-      ('Weather', 'Clear, 28°C', Icons.wb_sunny_outlined, palette.gold),
-      ('Network', 'Stable', Icons.signal_cellular_alt_rounded, palette.green),
-      ('Last Updated', '08:45:12 AM', Icons.refresh_rounded, palette.blue),
+      ('Devices', '$onlineDevices online', Icons.memory_rounded, palette.blue),
+      (
+        'Network',
+        loadedApiData ? 'Stable' : 'Waiting',
+        Icons.signal_cellular_alt_rounded,
+        palette.green
+      ),
+      ('Last Updated', _clockLabel(), Icons.refresh_rounded, palette.blue),
     ];
     return Container(
       height: 56,
@@ -688,6 +981,28 @@ class _SystemStrip extends StatelessWidget {
       ),
     );
   }
+}
+
+String _titleFromEventType(String eventType) {
+  final cleaned = eventType
+      .replaceAll(RegExp(r'[_-]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (cleaned.isEmpty) return 'Security event';
+  return cleaned
+      .split(' ')
+      .map((word) => word.isEmpty
+          ? word
+          : '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}')
+      .join(' ');
+}
+
+String _clockLabel() {
+  final now = DateTime.now();
+  final hour = now.hour.toString().padLeft(2, '0');
+  final minute = now.minute.toString().padLeft(2, '0');
+  final second = now.second.toString().padLeft(2, '0');
+  return '$hour:$minute:$second';
 }
 
 class _Panel extends StatelessWidget {
