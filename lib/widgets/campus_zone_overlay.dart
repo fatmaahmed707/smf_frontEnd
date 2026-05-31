@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../models/map_zone_view_model.dart';
@@ -68,8 +66,10 @@ class CampusZoneOverlay extends StatelessWidget {
                         ),
                         ...zone.workers.take(12).map((worker) {
                           return Positioned(
-                            left: (worker.offsetDx - slot.footprint.left) * width,
-                            top: (worker.offsetDy - slot.footprint.top) * height,
+                            left:
+                                (worker.offsetDx - slot.footprint.left) * width,
+                            top:
+                                (worker.offsetDy - slot.footprint.top) * height,
                             child: WorkerMarkerChip(
                               worker: worker,
                               palette: palette,
@@ -104,7 +104,6 @@ class CampusZoneOverlay extends StatelessWidget {
     );
   }
 }
-
 
 class _ZoneLabelCard extends StatelessWidget {
   final MapZoneViewModel zone;
@@ -247,7 +246,7 @@ class _ZonePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Flat 2D zone rendering (no isometric/3D geometry).
     final rect = Offset.zero & size;
-    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(18));
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(18));
 
     final fill = Paint()
       ..color = zone.statusColor.withValues(alpha: selected ? 0.22 : 0.10)
@@ -273,8 +272,8 @@ class _ZonePainter extends CustomPainter {
         break;
       case ZoneVisualType.gate:
         canvas.drawRect(
-          Rect.fromLTWH(size.width * 0.3, size.height * 0.38,
-              size.width * 0.4, size.height * 0.24),
+          Rect.fromLTWH(size.width * 0.3, size.height * 0.38, size.width * 0.4,
+              size.height * 0.24),
           iconPaint,
         );
         break;
@@ -312,4 +311,3 @@ class _ZonePainter extends CustomPainter {
         oldDelegate.selected != selected;
   }
 }
-
