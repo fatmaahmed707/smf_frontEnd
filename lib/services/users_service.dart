@@ -38,6 +38,15 @@ class UsersService {
     return User.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<User> getCurrentUser() async {
+    final response = await _apiService.get(
+      '/users/me',
+      headers: await AuthService.instance.authHeaders(),
+    );
+
+    return User.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<User> createUser({
     required String username,
     required String email,
