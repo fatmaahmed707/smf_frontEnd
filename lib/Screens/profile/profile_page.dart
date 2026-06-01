@@ -34,6 +34,8 @@ class _ProfilePageState extends State<ProfilePage> {
   static const _firstActiveAtKey = 'profile_first_active_at';
   static const _notificationSettingsKey = 'profile_notification_settings';
   User? _currentUser;
+  bool _isLoadingCurrentUser = true;
+  String? _currentUserError;
   String? _profileImageUrl;
   String? _profileDisplayName;
   int _alertsHandled = 0;
@@ -241,16 +243,27 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadCurrentUser() async {
+    setState(() {
+      _isLoadingCurrentUser = true;
+      _currentUserError = null;
+    });
     try {
       final user = await _usersService.getCurrentUser();
       if (!mounted) return;
-      setState(() => _currentUser = user);
+      setState(() {
+        _currentUser = user;
+        _isLoadingCurrentUser = false;
+      });
       if ((user.pictureUrl ?? '').trim().isNotEmpty) {
         setState(() => _profileImageUrl ??= user.pictureUrl!.trim());
       }
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      setState(() => _currentUser = _fallbackUser);
+      setState(() {
+        _currentUser = null;
+        _isLoadingCurrentUser = false;
+        _currentUserError = error.toString();
+      });
     }
   }
 
@@ -361,14 +374,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  User get _fallbackUser => const User(
-        id: '',
-        name: 'System User',
-        email: 'system@smf.local',
-        role: 'USER',
-        roles: ['USER'],
-      );
-
   @override
   Widget build(BuildContext context) {
     final languageProvider = context.watch<LanguageProvider>();
@@ -379,7 +384,25 @@ class _ProfilePageState extends State<ProfilePage> {
     final isTablet = size.width >= 760 && size.width < 1180;
     final outerPadding = size.width >= 900 ? 24.0 : 14.0;
     final shellPadding = size.width >= 760 ? 28.0 : 16.0;
-    final currentUser = _currentUser ?? _fallbackUser;
+    final currentUser = _currentUser;
+
+    if (currentUser == null) {
+      return Scaffold(
+        backgroundColor: palette.background,
+        body: Center(
+          child: _isLoadingCurrentUser
+              ? const CircularProgressIndicator(color: _ProfileColors.blue)
+              : Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    _currentUserError ?? 'Unable to load current user',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: palette.primaryText),
+                  ),
+                ),
+        ),
+      );
+    }
 
     return PopScope(
       canPop: false,
@@ -678,10 +701,7 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final savedName = profileDisplayName?.trim();
-    final displayName = savedName != null && savedName.isNotEmpty
-        ? savedName
-        : _profileDisplayName(user, languageProvider);
+    final displayName = _profileDisplayName(user, languageProvider);
     final roleLabel = _localizedProfileRole(user, languageProvider);
     final idLabel = _profileId(user);
 
