@@ -38,8 +38,8 @@ class User {
       name: (json['fullName'] ?? json['username'] ?? json['name'] ?? '')
           .toString(),
       email: (json['email'] ?? '').toString(),
-      role:
-          parsedRoles.isNotEmpty ? parsedRoles.first : json['role']?.toString(),
+      role: json['role']?.toString() ??
+          (parsedRoles.isNotEmpty ? parsedRoles.first : null),
       phone: json['phone']?.toString(),
       department: json['department']?.toString(),
       location: json['location']?.toString(),
