@@ -290,11 +290,16 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
                 width: 420,
                 child: DropdownButtonFormField<String>(
                   initialValue: selectedOption.id,
+                  isExpanded: true,
                   items: options
                       .map(
                         (option) => DropdownMenuItem<String>(
                           value: option.id,
-                          child: Text(option.label),
+                          child: Text(
+                            option.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       )
                       .toList(),

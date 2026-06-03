@@ -2759,16 +2759,12 @@ class _DashboardPageState extends State<DashboardPage>
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _alertsHeaderContent(alertsPalette),
-                          const SizedBox(height: 18),
-                          _alertsAddButton(alertsPalette),
                         ],
                       )
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(child: _alertsHeaderContent(alertsPalette)),
-                          const SizedBox(width: 16),
-                          _alertsAddButton(alertsPalette),
                         ],
                       ),
               ),
@@ -3002,39 +2998,6 @@ class _DashboardPageState extends State<DashboardPage>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _alertsAddButton(_DashboardPalette palette) {
-    final lang = context.read<LanguageProvider>();
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [palette.primaryBlue, palette.primaryBlue2],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: palette.primaryBlue2.withValues(alpha: 0.25),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ElevatedButton.icon(
-        onPressed: () => _showAlertDialog(palette),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(lang.getText('addAlert')),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-      ),
     );
   }
 

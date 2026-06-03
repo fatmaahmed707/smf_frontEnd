@@ -43,10 +43,6 @@ class _ZonesManagementPageState extends State<ZonesManagementPage> {
   final Map<String, Set<int>> _sessionAssignedRoleIds = {};
 
   String _localizedZoneName(String value, LanguageProvider lang) {
-    final lower = value.toLowerCase();
-    if (lower.contains('zone a')) return lang.getText('zoneAEngineeringOnly');
-    if (lower.contains('zone b')) return lang.getText('zoneBEngineeringManager');
-    if (lower.contains('zone c')) return lang.getText('zoneCOpenAccess');
     return value;
   }
 
