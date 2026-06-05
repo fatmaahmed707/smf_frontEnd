@@ -1212,9 +1212,7 @@ class _DashboardPageState extends State<DashboardPage>
         return _pageShell(
           title: languageProvider.getText('emergencyDashboard'),
           subtitle: languageProvider.getText('emergencySubtitleDashboard'),
-          child: EmergencyDashboardPage(
-            onViewFullMap: () => _selectDashboardTab(_DashboardTab.map),
-          ),
+          child: const EmergencyDashboardPage(),
           palette: palette,
         );
       case _DashboardTab.users:
