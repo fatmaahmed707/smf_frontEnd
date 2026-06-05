@@ -28,25 +28,54 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
-    final rawRoles = json['roles'];
+    final nestedUser = json['user'] is Map<String, dynamic>
+        ? Map<String, dynamic>.from(json['user'] as Map)
+        : <String, dynamic>{};
+    final mergedJson = <String, dynamic>{...nestedUser, ...json};
+
+    final rawRoles = mergedJson['roles'] ?? mergedJson['roleNames'];
     final parsedRoles = rawRoles is List
-        ? rawRoles.map((role) => role.toString()).toList()
+        ? rawRoles
+            .map((role) => role.toString().replaceFirst(RegExp(r'^ROLE_'), ''))
+            .where((role) => role.trim().isNotEmpty)
+            .toList()
         : const <String>[];
 
+    String pickValue(List<String> keys) {
+      for (final key in keys) {
+        final value = mergedJson[key];
+        if (value != null && value.toString().trim().isNotEmpty) {
+          return value.toString().trim();
+        }
+      }
+      return '';
+    }
+
+    final normalizedRole = pickValue(['role', 'userRole', 'roleName']);
+
     return User(
-      id: (json['id'] ?? json['userId'] ?? '').toString(),
-      name: (json['fullName'] ?? json['username'] ?? json['name'] ?? '')
-          .toString(),
-      email: (json['email'] ?? '').toString(),
-      role: json['role']?.toString() ??
-          (parsedRoles.isNotEmpty ? parsedRoles.first : null),
-      phone: json['phone']?.toString(),
-      department: json['department']?.toString(),
-      location: json['location']?.toString(),
-      shift: json['shift']?.toString(),
-      manager: json['manager']?.toString(),
-      provider: json['provider']?.toString(),
-      pictureUrl: json['pictureUrl']?.toString(),
+      id: pickValue(['id', 'userId', 'user_id']),
+      name: pickValue([
+        'fullName',
+        'displayName',
+        'full_name',
+        'full_name_en',
+        'fullNameEn',
+        'username',
+        'userName',
+        'name',
+      ]),
+      email: pickValue(['email', 'emailAddress', 'email_address']),
+      role: normalizedRole.isNotEmpty
+          ? normalizedRole.replaceFirst(RegExp(r'^ROLE_'), '')
+          : (parsedRoles.isNotEmpty ? parsedRoles.first : null),
+      phone: pickValue(['phone', 'phoneNumber', 'phone_number']),
+      department: pickValue(['department', 'company']),
+      location: pickValue(['location', 'workLocation', 'work_location']),
+      shift: pickValue(['shift', 'workShift']),
+      manager: pickValue(['manager', 'managerName']),
+      provider: pickValue(['provider', 'authProvider']),
+      pictureUrl: pickValue(['pictureUrl', 'avatarUrl', 'photoUrl']),
       roles: parsedRoles,
     );
   }
