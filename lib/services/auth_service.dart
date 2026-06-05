@@ -165,10 +165,14 @@ class AuthService {
     final roles = rawRoles is List
         ? rawRoles.map((role) => role.toString()).toList()
         : <String>[];
-    final email = (claims['email'] ?? '').toString();
-    final name =
-        (claims['username'] ?? claims['name'] ?? email.split('@').first)
-            .toString();
+    final email = (claims['email'] ?? claims['emailAddress'] ?? '').toString();
+    final name = (claims['displayName'] ??
+            claims['fullName'] ??
+            claims['full_name'] ??
+            claims['username'] ??
+            claims['name'] ??
+            email.split('@').first)
+        .toString();
 
     return User(
       id: (claims['sub'] ?? claims['id'] ?? _userId ?? '').toString(),
