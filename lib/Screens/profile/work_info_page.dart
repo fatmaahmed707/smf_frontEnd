@@ -51,11 +51,13 @@ class _WorkInfoPageState extends State<WorkInfoPage> {
 
   Future<void> _loadWorkInfo() async {
     try {
-      final user = await _usersService.getCurrentUser();
+      final user = await _usersService.getCurrentUserResilient();
       WorkerProfile? worker;
       try {
         worker = await _workersService.getWorker(user.id);
-      } on ApiException {
+      } on ApiException catch (error) {
+        if (!mounted) return;
+        debugPrint('Worker profile load skipped: ${error.message}');
         worker = null;
       }
 
