@@ -17,6 +17,8 @@ dependencies:
   lucide_icons: ^0.257.0
   google_sign_in: ^6.2.1
   google_sign_in_web: ^0.12.4+4
+  stomp_dart_client: ^2.0.0
+  flutter_local_notifications: ^17.2.3
   
 
 dev_dependencies:
